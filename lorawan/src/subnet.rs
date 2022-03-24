@@ -1,41 +1,82 @@
-const RETIRED_NETID: u32 = 0x200010;
+const RETIRED_NETID: NetId = 0x200010.into();
 
-type DevAddr = u32;
-type SubnetAddr = u32;
-type NetID = u32;
-type NetClass = u8;
+#[derive(PartialEq, Debug)]
+pub struct DevAddr(u32);
 
-/// Does this LoRaWAN devaddr belong to the Helium network?
-/// netid_list contains Helium's ordered list of assigned NetIDs
-///
-pub fn is_local_devaddr(devaddr: DevAddr, netid_list: &[NetID]) -> bool {
-    let netid = parse_netid(devaddr);
-    is_local_netid(netid, netid_list)
-}
+#[derive(PartialEq, Debug)]
+pub struct SubnetAddr(u32);
 
-/// Translate from a Helium subnet address to a LoRaWAN devaddr.
-/// netid_list contains Helium's ordered list of assigned NetIDs
-///
-pub fn devaddr_from_subnet(subnetaddr: SubnetAddr, netid_list: &[NetID]) -> Option<DevAddr> {
-    let netid = subnet_addr_to_netid(subnetaddr, netid_list);
-    if netid.is_some() {
-        let (lower, _upper) = netid_addr_range(netid.unwrap(), netid_list);
-        Some(devaddr(netid.unwrap(), subnetaddr - lower.unwrap()))
-    } else {
-        None
+#[derive(PartialEq, Clone, Debug, Default)]
+pub struct NetId(u32);
+
+#[derive(PartialEq, Debug)]
+pub struct NetClass(u8);
+
+impl From<u32> for DevAddr {
+    fn from(v: u32) -> Self {
+        Self(v)
     }
 }
 
-/// Translate from a LoRaWAN devaddr to a Helium subnet address.
-/// netid_list contains Helium's ordered list of assigned NetIDs
-///
-pub fn subnet_from_devaddr(devaddr: DevAddr, netid_list: &[NetID]) -> Option<SubnetAddr> {
-    let netid = parse_netid(devaddr);
-    let (lower, _upper) = netid_addr_range(netid, netid_list);
-    if lower.is_some() {
-        Some(lower.unwrap() + nwk_addr(devaddr))
-    } else {
-        None
+impl DevAddr {
+    /// Translate from a Helium subnet address to a LoRaWAN devaddr.
+    /// netid_list contains Helium's ordered list of assigned NetIDs
+    ///
+    pub fn from_subnet(subnetaddr: &SubnetAddr, netid_list: &[NetId]) -> Option<Self> {
+        NetId::from_subnet_addr(subnetaddr, netid_list).and_then(|netid| {
+            netid
+                .addr_range(netid_list)
+                .map(|(lower, _upper)| netid.to_devaddr(subnetaddr.0 - lower.0))
+        })
+    }
+
+    /// Does this LoRaWAN devaddr belong to the Helium network?
+    /// netid_list contains Helium's ordered list of assigned NetIDs
+    ///
+    pub fn is_local(&self, netid_list: &[NetId]) -> bool {
+        NetId::from(self).is_local(netid_list)
+    }
+
+    fn net_class(self) -> NetClass {
+        fn netid_shift_prefix(prefix: u8, index: u8) -> NetClass {
+            if (prefix & (1 << index)) == 0 {
+                NetClass(7 - index)
+            } else if index > 0 {
+                netid_shift_prefix(prefix, index - 1)
+            } else {
+                NetClass(0)
+            }
+        }
+
+        let n_bytes = self.0.to_be_bytes();
+        let first = n_bytes[0];
+        netid_shift_prefix(first, 7)
+    }
+
+    fn nwk_addr(&self) -> u32 {
+        let netid = NetId::from(self);
+        let len = NetClass::from(&netid).addr_len();
+        let mask = (1 << len) - 1;
+        self.0 & mask
+    }
+}
+
+impl SubnetAddr {
+    /// Translate from a LoRaWAN devaddr to a Helium subnet address.
+    /// netid_list contains Helium's ordered list of assigned NetIDs
+    ///
+    pub fn from_devaddr(dev_addr: &DevAddr, netid_list: &[NetId]) -> Option<Self> {
+        NetId::from(dev_addr)
+            .addr_range(netid_list)
+            .map(|(lower, _upper)| Self(lower.0 + dev_addr.nwk_addr()))
+    }
+
+    pub fn within_range(&self, netid: &NetId, netid_list: &[NetId]) -> bool {
+        netid
+            .addr_range(netid_list)
+            .map_or(false, |(lower, upper)| {
+                (self.0 >= lower.0) && (self.0 < upper.0)
+            })
     }
 }
 
@@ -45,150 +86,122 @@ pub fn subnet_from_devaddr(devaddr: DevAddr, netid_list: &[NetID]) -> Option<Sub
 // Note - function and var names correspond closely to the LoRaWAN spec.
 //
 
-fn netid_class(netid: NetID) -> NetClass {
-    let netclass: NetClass = (netid >> 21) as NetClass;
-    netclass
-}
-
-fn addr_len(netclass: NetClass) -> u32 {
-    *[25, 24, 20, 17, 15, 13, 10, 7]
-        .get(netclass as usize)
-        .unwrap_or(&0)
-}
-
-fn id_len(netclass: NetClass) -> u32 {
-    *[6, 6, 9, 11, 12, 13, 15, 17]
-        .get(netclass as usize)
-        .unwrap_or(&0)
-}
-
-fn subnet_addr_to_netid(subnetaddr: SubnetAddr, netid_list: &[NetID]) -> Option<NetID> {
-    let netid = *netid_list
-        .iter()
-        .find(|item| subnet_addr_within_range(subnetaddr, **item, netid_list))
-        .unwrap_or(&0);
-    if netid == 0 {
-        None
-    } else {
-        Some(netid)
+impl From<&NetId> for NetClass {
+    fn from(netid: &NetId) -> Self {
+        Self((netid.0 >> 21) as u8)
     }
 }
 
-fn subnet_addr_within_range(subnetaddr: SubnetAddr, netid: NetID, netid_list: &[NetID]) -> bool {
-    let (lower, upper) = netid_addr_range(netid, netid_list);
-    (subnetaddr >= lower.unwrap()) && (subnetaddr < upper.unwrap())
-}
+impl NetClass {
+    fn addr_len(&self) -> u32 {
+        const ADDR_LEN: &[u8] = &[25, 24, 20, 17, 15, 13, 10, 7];
+        *ADDR_LEN.get(self.0 as usize).unwrap_or(&0) as u32
+    }
 
-fn var_net_class(netclass: NetClass) -> u32 {
-    let idlen = id_len(netclass);
-    match netclass {
-        0 => 0,
-        1 => 0b10u32 << idlen,
-        2 => 0b110u32 << idlen,
-        3 => 0b1110u32 << idlen,
-        4 => 0b11110u32 << idlen,
-        5 => 0b111110u32 << idlen,
-        6 => 0b1111110u32 << idlen,
-        7 => 0b11111110u32 << idlen,
-        _ => 0,
+    fn id_len(&self) -> u32 {
+        const ID_LEN: &[u8] = &[6, 6, 9, 11, 12, 13, 15, 17];
+        *ID_LEN.get(self.0 as usize).unwrap_or(&0) as u32
     }
 }
 
-fn var_netid(netclass: NetClass, netid: NetID) -> NetID {
-    netid << addr_len(netclass)
-}
+impl From<&DevAddr> for NetId {
+    fn from(dev_addr: &DevAddr) -> Self {
+        fn get_netid(dev_addr: &DevAddr, prefix_len: u8, nwkidbits: u32) -> u32 {
+            (dev_addr.0 << (prefix_len - 1)) >> (31 - nwkidbits)
+        }
 
-fn devaddr(netid: NetID, nwkaddr: u32) -> DevAddr {
-    let netclass = netid_class(netid);
-    let id = netid & 0b111111111111111111111;
-    let addr = var_net_class(netclass) | id;
-    var_netid(netclass, addr) | nwkaddr
-}
-
-fn is_local_netid(netid: NetID, netid_list: &[NetID]) -> bool {
-    if netid == RETIRED_NETID {
-        true
-    } else {
-        netid_list.contains(&netid)
+        let net_type = dev_addr.net_class();
+        let id = get_netid(dev_addr, net_type.0 + 1, net_type.id_len());
+        Self(id | ((net_type.0 as u32) << 21))
     }
 }
 
-fn netid_type(devaddr: DevAddr) -> NetClass {
-    fn netid_shift_prefix(prefix: u8, index: u8) -> NetClass {
-        if (prefix & (1 << index)) == 0 {
-            7 - index
-        } else if index > 0 {
-            netid_shift_prefix(prefix, index - 1)
+impl From<u32> for NetId {
+    fn from(v: u32) -> Self {
+        Self(v)
+    }
+}
+
+impl NetId {
+    fn is_local(&self, netid_list: &[NetId]) -> bool {
+        if self == &RETIRED_NETID {
+            true
         } else {
-            0
+            netid_list.contains(self)
         }
     }
 
-    let n_bytes = devaddr.to_be_bytes();
-    let first = n_bytes[0];
-    netid_shift_prefix(first, 7)
-}
-
-fn parse_netid(devaddr: DevAddr) -> NetID {
-    fn get_netid(devaddr: u32, prefix_len: u8, nwkidbits: u32) -> u32 {
-        (devaddr << (prefix_len - 1)) >> (31 - nwkidbits)
-    }
-
-    let net_type = netid_type(devaddr);
-    let id = get_netid(devaddr, net_type + 1, id_len(net_type));
-    id | ((net_type as u32) << 21)
-}
-
-fn netid_addr_range(
-    netid: NetID,
-    netid_list: &[NetID],
-) -> (Option<SubnetAddr>, Option<SubnetAddr>) {
-    // 95% of traffic is non-Helium so netid_list.contains will usually be false
-    if netid_list.contains(&netid) {
+    fn addr_range(&self, netid_list: &[NetId]) -> Option<(SubnetAddr, SubnetAddr)> {
+        // 95% of traffic is non-Helium so netid_list.contains will usually be false
+        if !netid_list.contains(self) {
+            return None;
+        }
         let mut lower: u32 = 0;
         let mut upper: u32 = 0;
         // 5% code path
         for item in netid_list {
-            let size = netid_size(*item);
-            if *item == netid {
+            let size = item.size();
+            if item == self {
                 upper += size;
                 break;
             }
             lower += size;
             upper = lower;
         }
-        (Some(lower), Some(upper))
-    } else {
-        (None, None)
+        Some((SubnetAddr(lower), SubnetAddr(upper)))
     }
-}
 
-fn nwk_addr(devaddr: DevAddr) -> u32 {
-    let netid = parse_netid(devaddr);
-    let len = addr_len(netid_class(netid));
-    let mask = (1 << len) - 1;
-    devaddr & mask
-}
+    fn size(&self) -> u32 {
+        1 << NetClass::from(self).addr_len()
+    }
 
-fn netid_size(netid: NetID) -> u32 {
-    1 << addr_len(netid_class(netid))
+    fn to_devaddr(&self, nwkaddr: u32) -> DevAddr {
+        fn var_net_class(netclass: &NetClass) -> u32 {
+            let idlen = netclass.id_len();
+            match netclass.0 {
+                0 => 0,
+                1 => 0b10u32 << idlen,
+                2 => 0b110u32 << idlen,
+                3 => 0b1110u32 << idlen,
+                4 => 0b11110u32 << idlen,
+                5 => 0b111110u32 << idlen,
+                6 => 0b1111110u32 << idlen,
+                7 => 0b11111110u32 << idlen,
+                _ => 0,
+            }
+        }
+
+        fn var_netid(netclass: &NetClass, netid: u32) -> u32 {
+            netid << netclass.addr_len()
+        }
+
+        let netclass = NetClass::from(self);
+        let id = self.0 & 0b111111111111111111111;
+        let addr = var_net_class(&netclass) | id;
+        DevAddr(var_netid(&netclass, addr) | nwkaddr)
+    }
+
+    fn from_subnet_addr(subnetaddr: &SubnetAddr, netid_list: &[NetId]) -> Option<Self> {
+        netid_list
+            .iter()
+            .find(|item| subnetaddr.within_range(*item, netid_list))
+            .cloned()
+    }
 }
 
 #[cfg(test)]
 
-static NETID_LIST: [NetID; 3] = [0xE00001, 0xC00035, 0x60002D];
+static NETID_LIST: [NetId; 3] = [NetId(0xE00001), NetId(0xC00035), NetId(0x60002D)];
 
 mod tests {
     use super::*;
     use rand::Rng;
 
-    fn create_netid(netclass: NetClass, id: u32) -> NetID {
-        let netclass_32 = netclass as u32;
-        let netid: NetID = (netclass_32 << 21) | id;
-        netid
+    fn create_netid(netclass: u8, id: u32) -> NetId {
+        NetId(((netclass as u32) << 21) | id)
     }
 
-    fn mock_random_netids() -> Vec<u32> {
+    fn mock_random_netids() -> Vec<NetId> {
         let mut rng = rand::thread_rng();
         // Len = rand:uniform(10),
         // [create_netid(rand:uniform(7), rand:uniform(64)) || _ <- lists:seq(1, Len)].
@@ -197,9 +210,9 @@ mod tests {
             .map(|_| {
                 let id = rng.gen_range(0..65);
                 let netclass = rng.gen_range(0..8);
-                create_netid(netclass, id) as u32
+                create_netid(netclass, id)
             })
-            .collect::<Vec<u32>>();
+            .collect::<Vec<NetId>>();
         netids
     }
 
@@ -233,14 +246,14 @@ mod tests {
         array[pos..].rotate_right(1);
     }
 
-    fn exercise_subnet_list(devaddr: DevAddr, netid_list: &[NetID]) {
+    fn exercise_subnet_list(devaddr: DevAddr, netid_list: &[NetId]) {
         let subnet_addr = subnet_from_devaddr(devaddr, netid_list);
         let devaddr_2 = devaddr_from_subnet(subnet_addr.unwrap(), netid_list);
         assert_eq!(devaddr, devaddr_2.unwrap());
     }
 
     fn exercise_subnet(devaddr: DevAddr) {
-        let netid = parse_netid(devaddr);
+        let netid = NetId::from(&devaddr);
         exercise_subnet_list(devaddr, insert_item_to_mut(netid, &NETID_LIST, 0));
         exercise_subnet_list(devaddr, insert_item_to_mut(netid, &NETID_LIST, 1));
         exercise_subnet_list(devaddr, insert_item_to_mut(netid, &NETID_LIST, 2));
@@ -268,17 +281,17 @@ mod tests {
     #[test]
     fn test_netid() {
         // LegacyDevAddr = <<$H:7, 0:25>>,
-        let LegacyNetID: NetID = RETIRED_NETID;
+        let LegacyNetID: NetId = RETIRED_NETID;
 
-        let NetID00: NetID = 0xE00001;
-        let NetID01: NetID = 0xC00035;
-        let NetID02: NetID = 0x60002D;
-        let NetIDExt: NetID = 0xC00050;
+        let NetID00: NetId = 0xE00001.into();
+        let NetID01: NetId = 0xC00035.into();
+        let NetID02: NetId = 0x60002D.into();
+        let NetIDExt: NetId = 0xC00050.into();
 
         // Class 6
-        let DevAddr00: DevAddr = 0x90000000;
-        let DevAddr01: DevAddr = 0xFC00D410;
-        let DevAddr02: DevAddr = 0xE05A0008;
+        let DevAddr00: DevAddr = 0x90000000.into();
+        let DevAddr01: DevAddr = 0xFC00D410.into();
+        let DevAddr02: DevAddr = 0xE05A0008.into();
 
         let NetWidth0 = addr_len(netid_class(NetID00));
         assert_eq!(7, NetWidth0);
@@ -293,13 +306,10 @@ mod tests {
         let NetSize2 = netid_size(NetID02);
         assert_eq!(131072, NetSize2);
 
-        let NetIDList: Vec<NetID> = vec![NetID00, NetID01, NetID02];
-        let LocalTrue = is_local_netid(NetID01, &NetIDList);
-        let LocalFalse = is_local_netid(NetIDExt, &NetIDList);
-        let LegacyLocal = is_local_netid(LegacyNetID, &NetIDList);
-        assert_eq!(true, LocalTrue);
-        assert_eq!(false, LocalFalse);
-        assert_eq!(true, LegacyLocal);
+        let NetIDList: Vec<NetId> = vec![NetID00, NetID01, NetID02];
+        assert!(NetID01.is_local(&NetIDList));
+        assert!(!NetIDExt.is_local(&NetIDList));
+        assert!(LegacyNetID.is_local(&NetIDList));
 
         let DevAddrLegacy = devaddr(LegacyNetID, 0);
         assert_eq!(DevAddr00, DevAddrLegacy);
@@ -401,49 +411,49 @@ mod tests {
     fn test_id() {
         // CP data (matches Erlang test cases)
         // <<91, 255, 255, 255>> "[45] == 2D == 45 type 0"
-        assert_eq!(0x00002D, parse_netid(0x5BFFFFFF));
+        assert_eq!(NetId::from(0x00002D), NetId::from(0x5BFFFFFF));
         // <<173, 255, 255, 255>> "[45] == 2D == 45 type 1"
-        assert_eq!(0x20002D, parse_netid(0xADFFFFFF));
+        assert_eq!(NetId::from(0x20002D), NetId::from(0xADFFFFFF));
         // <<214, 223, 255, 255>> "[1,109] == 16D == 365 type 2"
-        assert_eq!(0x40016D, parse_netid(0xD6DFFFFF));
+        assert_eq!(NetId::from(0x40016D), NetId::from(0xD6DFFFFF));
         // <<235, 111, 255, 255>>), "[5,183] == 5B7 == 1463 type 3"
-        assert_eq!(0x6005B7, parse_netid(0xEB6FFFFF));
+        assert_eq!(NetId::from(0x6005B7), NetId::from(0xEB6FFFFF));
         // <<245, 182, 255, 255>>), "[11, 109] == B6D == 2925 type 4"
-        assert_eq!(0x800B6D, parse_netid(0xF5B6FFFF));
+        assert_eq!(NetId::from(0x800B6D), NetId::from(0xF5B6FFFF));
         // println!(
         //     "left: {:#04X?} right: {:#04X?}",
         //     0xA016DB,
         //     parse_netid(0xFADB7FFF)
         // );
         // <<250, 219, 127, 255>>), "[22,219] == 16DB == 5851 type 5"
-        assert_eq!(0xA016DB, parse_netid(0xFADB7FFF));
+        assert_eq!(NetId::from(0xA016DB), NetId::from(0xFADB7FFF));
         // <<253, 109, 183, 255>> "[91, 109] == 5B6D == 23405 type 6"
-        assert_eq!(0xC05B6D, parse_netid(0xFD6DB7FF));
+        assert_eq!(NetId::from(0xC05B6D), NetId::from(0xFD6DB7FF));
         // <<254, 182, 219, 127>> "[1,109,182] == 16DB6 == 93622 type 7"
-        assert_eq!(0xE16DB6, parse_netid(0xFEB6DB7F));
+        assert_eq!(NetId::from(0xE16DB6), NetId::from(0xFEB6DB7F));
         println!(
             "left: {:#04X?} right: {:#04X?}",
-            0xA016DB,
-            parse_netid(0xFFFFFFFF)
+            NetId::from(0xA016DB),
+            NetId::from(0xFFFFFFFF)
         );
         // FixME - Invalid NetID type
-        assert_eq!(127, parse_netid(0xFFFFFFFF));
+        assert_eq!(NetId::from(127), NetId::from(0xFFFFFFFF));
 
         // Actility spreadsheet examples
-        assert_eq!(0, parse_netid(0));
-        assert_eq!(1, parse_netid(1 << 25));
-        assert_eq!(2, parse_netid(1 << 26));
+        assert_eq!(NetId::from(0), NetId::from(0));
+        assert_eq!(NetId::from(1), NetId::from(1 << 25));
+        assert_eq!(NetId::from(2), NetId::from(1 << 26));
 
         // Mis-parsed as netid 4 of type 3
-        assert_eq!(0x600004, parse_netid(0xE009ABCD));
+        assert_eq!(NetId::from(0x600004), NetId::from(0xE009ABCD));
         // Valid DevAddr, NetID not assigned
-        assert_eq!(0x20002D, parse_netid(0xADFFFFFF));
+        assert_eq!(NetId::from(0x20002D), NetId::from(0xADFFFFFF));
         // Less than 32 bit number
-        assert_eq!(0, parse_netid(46377));
+        assert_eq!(NetId::from(0), NetId::from(46377));
 
         // Louis test data
-        assert_eq!(0x600002, parse_netid(0xE0040001));
-        assert_eq!(0x600002, parse_netid(0xE0052784));
-        assert_eq!(0x000002, parse_netid(0x0410BEA3));
+        assert_eq!(NetId::from(0x600002), NetId::from(0xE0040001));
+        assert_eq!(NetId::from(0x600002), NetId::from(0xE0052784));
+        assert_eq!(NetId::from(0x000002), NetId::from(0x0410BEA3));
     }
 }
