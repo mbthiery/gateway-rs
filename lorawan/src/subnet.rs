@@ -65,7 +65,7 @@ impl DevAddr {
 
 impl From<u32> for SubnetAddr {
     fn from(v: u32) -> Self {
-        Self(v & 0b111111111111111111111)
+        Self(v)
     }
 }
 
