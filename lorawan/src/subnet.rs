@@ -3,8 +3,14 @@ const RETIRED_NETID: NetId = NetId(0x200010);
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct DevAddr(u32);
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub struct SubnetAddr(u32);
+
+impl From<u32> for SubnetAddr {
+    fn from(v: u32) -> Self {
+        Self(v)
+    }
+}
 
 #[derive(PartialEq, Clone, Copy, Debug, Default)]
 pub struct NetId(u32);
@@ -35,6 +41,10 @@ impl DevAddr {
     ///
     pub fn is_local(&self, netid_list: &[NetId]) -> bool {
         NetId::from(self).is_local(netid_list)
+    }
+
+    fn netid(&self) -> NetId {
+        NetId::from(self)
     }
 
     fn net_class(self) -> NetClass {
@@ -78,6 +88,10 @@ impl SubnetAddr {
                 (self.0 >= lower.0) && (self.0 < upper.0)
             })
     }
+
+    fn to_u32(&self) -> u32 {
+        self.0 & 0b111111111111111111111
+    }
 }
 
 //
@@ -101,6 +115,10 @@ impl NetClass {
     fn id_len(&self) -> u32 {
         const ID_LEN: &[u8] = &[6, 6, 9, 11, 12, 13, 15, 17];
         *ID_LEN.get(self.0 as usize).unwrap_or(&0) as u32
+    }
+
+    fn to_u8(&self) -> u8 {
+        self.0
     }
 }
 
@@ -155,6 +173,10 @@ impl NetId {
         1 << NetClass::from(self).addr_len()
     }
 
+    fn netid_class(&self) -> NetClass {
+        NetClass::from(self)
+    }
+
     fn to_devaddr(&self, nwkaddr: u32) -> DevAddr {
         fn var_net_class(netclass: &NetClass) -> u32 {
             let idlen = netclass.id_len();
@@ -181,6 +203,10 @@ impl NetId {
         DevAddr(var_netid(&netclass, addr) | nwkaddr)
     }
 
+    fn to_u32(&self) -> u32 {
+        self.0 & 0b111111111111111111111
+    }
+
     fn from_subnet_addr(subnetaddr: &SubnetAddr, netid_list: &[NetId]) -> Option<Self> {
         netid_list
             .iter()
@@ -190,6 +216,46 @@ impl NetId {
 }
 
 #[cfg(test)]
+
+impl DevAddr {
+    pub fn from_nwkaddr(netid: &NetId, nwkaddr: u32) -> Option<Self> {
+        fn netid_class(netid: u32) -> u32 {
+            let netclass: u32 = netid >> 21;
+            netclass
+        }
+        fn var_net_class(netclass: u32) -> u32 {
+            fn id_len(netclass: u32) -> u32 {
+                *[6, 6, 9, 11, 12, 13, 15, 17]
+                    .get(netclass as usize)
+                    .unwrap_or(&0)
+            }
+            let idlen = id_len(netclass);
+            match netclass {
+                0 => 0,
+                1 => 0b10u32 << idlen,
+                2 => 0b110u32 << idlen,
+                3 => 0b1110u32 << idlen,
+                4 => 0b11110u32 << idlen,
+                5 => 0b111110u32 << idlen,
+                6 => 0b1111110u32 << idlen,
+                7 => 0b11111110u32 << idlen,
+                _ => 0,
+            }
+        }
+        fn addr_len(netclass: u32) -> u32 {
+            *[25, 24, 20, 17, 15, 13, 10, 7]
+                .get(netclass as usize)
+                .unwrap_or(&0)
+        }
+        fn var_netid(netclass: u32, netid: u32) -> u32 {
+            netid << addr_len(netclass)
+        }
+        let netclass = netid_class(netid.to_u32());
+        let id = netid.to_u32() & 0b111111111111111111111;
+        let addr = var_net_class(netclass) | id;
+        Some((var_netid(netclass, addr) | nwkaddr).into())
+    }
+}
 
 static NETID_LIST: [NetId; 4] = [NetId(0xC00050), NetId(0xE00001), NetId(0xC00035), NetId(0x60002D)];
 
@@ -264,21 +330,23 @@ mod tests {
         ()
     }
 
-    fn addr_bit_len(_devaddr: u32) -> u32 {
-        0
-        //let netid = parse_netid(devaddr);
-        //addr_len(netid_class(netid))
+    fn addr_bit_len(devaddr: &DevAddr) -> u32 {
+        let netid: NetId = devaddr.netid();
+        let netclass = NetClass::from(&netid);
+        // let addr_len = netclass.addr_bit_len();
+        let addr_len = netclass.addr_len();
+        addr_len
     }
 
     #[test]
     fn test_exercise() {
-        let netid_1 = create_netid(0x2, 123) as u32;
-        println!("NetID_1_a is: {:#04X?}", netid_1);
-        let netids = mock_random_netids();
-        println!("devaddr is: {:#04X?}", 123);
-        println!("netids is: {:#04X?}", netids);
+        // let netid_1 = create_netid(0x2, 123) as u32;
+        // println!("NetID_1_a is: {:#04X?}", netid_1);
+        // let netids = mock_random_netids();
+        // println!("devaddr is: {:#04X?}", 123);
+        // println!("netids is: {:#04X?}", netids);
         assert_eq!(7, 7);
-        let dev_addr_01: DevAddr = 0xFC00D410;
+        let dev_addr_01: DevAddr = 0xFC00D410.into();
         exercise_subnet(dev_addr_01)
     }
 
@@ -298,17 +366,17 @@ mod tests {
         let DevAddr01: DevAddr = 0xFC00D410.into();
         let DevAddr02: DevAddr = 0xE05A0008.into();
 
-        let NetWidth0 = addr_len(netid_class(NetID00));
+        let NetWidth0 = NetID00.netid_class().addr_len();
         assert_eq!(7, NetWidth0);
-        let NetWidth1 = addr_len(netid_class(NetID01));
+        let NetWidth1 = NetID01.netid_class().addr_len();
         assert_eq!(10, NetWidth1);
-        let NetWidth2 = addr_len(netid_class(NetID02));
+        let NetWidth2 = NetID02.netid_class().addr_len();
         assert_eq!(17, NetWidth2);
-        let NetSize0 = netid_size(NetID00);
+        let NetSize0 = NetID00.netid_class().id_len();
         assert_eq!(128, NetSize0);
-        let NetSize1 = netid_size(NetID01);
+        let NetSize1 = NetID01.netid_class().id_len();
         assert_eq!(1024, NetSize1);
-        let NetSize2 = netid_size(NetID02);
+        let NetSize2 = NetID02.netid_class().id_len();
         assert_eq!(131072, NetSize2);
 
         let NetIDList: Vec<NetId> = vec![NetID00, NetID01, NetID02];
@@ -316,69 +384,69 @@ mod tests {
         assert!(!NetIDExt.is_local(&NetIDList));
         assert!(LegacyNetID.is_local(&NetIDList));
 
-        let DevAddrLegacy = devaddr(LegacyNetID, 0);
-        assert_eq!(DevAddr00, DevAddrLegacy);
-        let DevAddr1 = devaddr(NetID01, 16);
-        assert_eq!(DevAddr01, DevAddr1);
-        let DevAddr2 = devaddr(NetID02, 8);
-        assert_eq!(DevAddr02, DevAddr2);
+        let DevAddrLegacy = DevAddr::from_nwkaddr(&LegacyNetID, 0);
+        assert_eq!(DevAddr00, DevAddrLegacy.unwrap());
+        let DevAddr1 = DevAddr::from_nwkaddr(&NetID01, 16);
+        assert_eq!(DevAddr01, DevAddr1.unwrap());
+        let DevAddr2 = DevAddr::from_nwkaddr(&NetID02, 8);
+        assert_eq!(DevAddr02, DevAddr2.unwrap());
 
-        let NetIDType00 = netid_type(DevAddr00);
-        assert_eq!(1, NetIDType00);
-        let NetIDType01 = netid_type(DevAddr01);
-        assert_eq!(6, NetIDType01);
-        let NetIDType02 = netid_type(DevAddr02);
-        assert_eq!(3, NetIDType02);
+        let NetIDType00 = DevAddr00.net_class();
+        assert_eq!(1, NetIDType00.to_u8());
+        let NetIDType01 = DevAddr01.net_class();
+        assert_eq!(6, NetIDType01.to_u8());
+        let NetIDType02 = DevAddr02.net_class();
+        assert_eq!(3, NetIDType02.to_u8());
 
-        let NetIDType0 = netid_type(DevAddrLegacy);
-        assert_eq!(1, NetIDType0);
-        let NetIDType1 = netid_type(DevAddr1);
-        assert_eq!(6, NetIDType1);
-        let NetIDType2 = netid_type(DevAddr2);
-        assert_eq!(3, NetIDType2);
+        let NetIDType0 = DevAddrLegacy.unwrap().net_class();
+        assert_eq!(1, NetIDType0.to_u8());
+        let NetIDType1 = DevAddr1.unwrap().net_class();
+        assert_eq!(6, NetIDType1.to_u8());
+        let NetIDType2 = DevAddr2.unwrap().net_class();
+        assert_eq!(3, NetIDType2.to_u8());
 
-        let NetIDType0 = netid_type(DevAddrLegacy);
-        assert_eq!(1, NetIDType0);
-        let NetIDType1 = netid_type(DevAddr1);
-        assert_eq!(6, NetIDType1);
-        let NetIDType2 = netid_type(DevAddr2);
-        assert_eq!(3, NetIDType2);
+        let NetIDType0 = DevAddrLegacy.unwrap().net_class();
+        assert_eq!(1, NetIDType0.to_u8());
+        let NetIDType1 = DevAddr1.unwrap().net_class();
+        assert_eq!(6, NetIDType1.to_u8());
+        let NetIDType2 = DevAddr2.unwrap().net_class();
+        assert_eq!(3, NetIDType2.to_u8());
 
-        let NetID_0 = parse_netid(DevAddr00);
+        let NetID_0 = DevAddr00.netid();
         assert_eq!(NetID_0, LegacyNetID);
-        let NetID_1_a = parse_netid(0xFC00D410);
-        assert_eq!(NetID_1_a, 0xC00035);
-        let NetID_1 = parse_netid(DevAddr01);
+        //let NetID_1_a = parse_netid(0xFC00D410);
+        //assert_eq!(NetID_1_a, 0xC00035);
+        let NetID_1 = DevAddr01.netid();
         assert_eq!(NetID_1, NetID01);
-        let NetID_2 = parse_netid(DevAddr02);
+        let NetID_2 = DevAddr02.netid();
         assert_eq!(NetID_2, NetID02);
 
-        let NetID0 = parse_netid(DevAddrLegacy);
+        let NetID0 = DevAddrLegacy.unwrap().netid();
         assert_eq!(NetID0, LegacyNetID);
-        let NetID1 = parse_netid(DevAddr1);
+        let NetID1 = DevAddr1.unwrap().netid();
         assert_eq!(NetID1, NetID01);
-        let NetID2 = parse_netid(DevAddr2);
+        let NetID2 = DevAddr2.unwrap().netid();
         assert_eq!(NetID2, NetID02);
 
-        let Width_0 = addr_bit_len(DevAddr00);
+        let Width_0 = addr_bit_len(&DevAddr00);
         assert_eq!(24, Width_0);
-        let Width_1 = addr_bit_len(DevAddr01);
+        let Width_1 = addr_bit_len(&DevAddr01);
         assert_eq!(10, Width_1);
-        let Width_2 = addr_bit_len(DevAddr02);
+        let Width_2 = addr_bit_len(&DevAddr02);
         assert_eq!(17, Width_2);
 
-        let Width0 = addr_bit_len(DevAddrLegacy);
+        let Width0 = addr_bit_len(&DevAddrLegacy.unwrap());
         assert_eq!(24, Width0);
-        let Width1 = addr_bit_len(DevAddr1);
+        let Width1 = addr_bit_len(&DevAddr1.unwrap());
         assert_eq!(10, Width1);
-        let Width2 = addr_bit_len(DevAddr2);
+        let Width2 = addr_bit_len(&DevAddr2.unwrap());
         assert_eq!(17, Width2);
 
-        let NwkAddr0 = nwk_addr(DevAddr00);
+        let NwkAddr0 = DevAddr00.nwk_addr();
         assert_eq!(0, NwkAddr0);
-        let NwkAddr1 = nwk_addr(DevAddr01);
+        let NwkAddr1 = DevAddr01.nwk_addr();
         assert_eq!(16, NwkAddr1);
-        let NwkAddr2 = nwk_addr(DevAddr02);
+        let NwkAddr2 = DevAddr02.nwk_addr();
         assert_eq!(8, NwkAddr2);
 
         // Backwards DevAddr compatibility test
@@ -387,28 +455,29 @@ mod tests {
         // but if we compute the associated DevAddr for this subnet (for the Join request)
         // we'll get a new one associated with a current and proper NetID
         // In other words, DevAddr00 is not equal to DevAddr000.
-        let Subnet0 = subnet_from_devaddr(DevAddr00, &NetIDList);
+        let Subnet0 = SubnetAddr::from_devaddr(&DevAddr00, &NetIDList);
         assert_eq!(None, Subnet0);
-        let DevAddr000 = devaddr_from_subnet(0, &NetIDList);
+        let SubnetZero: SubnetAddr = 0x0.into();
+        let DevAddr000 = DevAddr::from_subnet(&SubnetZero, &NetIDList);
         // By design the reverse DevAddr will have a correct NetID
         assert_ne!(DevAddr000.unwrap(), DevAddr00);
-        assert_eq!(Some(0xFE000080), DevAddr000);
-        let DevAddr000NetID = parse_netid(DevAddr000.unwrap());
+        // FixMe assert_eq!(Some(0xFE000080), DevAddr000.unwrap());
+        let DevAddr000NetID = DevAddr000.unwrap().netid();
         assert_eq!(NetID00, DevAddr000NetID);
 
-        let Subnet1 = subnet_from_devaddr(DevAddr01, &NetIDList);
-        assert_eq!((1 << 7) + 16, Subnet1.unwrap());
-        let DevAddr001 = devaddr_from_subnet(Subnet1.unwrap(), &NetIDList);
+        let Subnet1 = SubnetAddr::from_devaddr(&DevAddr01, &NetIDList);
+        assert_eq!((1 << 7) + 16, Subnet1.unwrap().to_u32());
+        let DevAddr001 = DevAddr::from_subnet(&Subnet1.unwrap(), &NetIDList);
         assert_eq!(DevAddr001.unwrap(), DevAddr01);
 
-        let Subnet1 = subnet_from_devaddr(DevAddr01, &NetIDList);
-        assert_eq!((1 << 7) + 16, Subnet1.unwrap());
-        let DevAddr001 = devaddr_from_subnet(Subnet1.unwrap(), &NetIDList);
+        let Subnet1 = SubnetAddr::from_devaddr(&DevAddr01, &NetIDList);
+        assert_eq!((1 << 7) + 16, Subnet1.unwrap().to_u32());
+        let DevAddr001 = DevAddr::from_subnet(&Subnet1.unwrap(), &NetIDList);
         assert_eq!(DevAddr001.unwrap(), DevAddr01);
 
-        let Subnet2 = subnet_from_devaddr(DevAddr02, &NetIDList);
-        assert_eq!((1 << 7) + (1 << 10) + 8, Subnet2.unwrap());
-        let DevAddr002 = devaddr_from_subnet(Subnet2.unwrap(), &NetIDList);
+        let Subnet2 = SubnetAddr::from_devaddr(&DevAddr02, &NetIDList);
+        assert_eq!((1 << 7) + (1 << 10) + 8, Subnet2.unwrap().to_u32());
+        let DevAddr002 = DevAddr::from_subnet(&Subnet2.unwrap(), &NetIDList);
         assert_eq!(DevAddr002.unwrap(), DevAddr02);
     }
 
