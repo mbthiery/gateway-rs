@@ -39,6 +39,12 @@ impl DevAddr {
         NetId::from(self).is_local(netid_list)
     }
 
+    /// Parse the LoRaWAN NetID
+    ///
+    pub fn netid(&self) -> NetId {
+        NetId::from(self)
+    }
+
     fn net_class(self) -> NetClass {
         fn netid_shift_prefix(prefix: u8, index: u8) -> NetClass {
             if (prefix & (1 << index)) == 0 {
@@ -508,49 +514,49 @@ mod tests {
     fn test_id() {
         // CP data (matches Erlang test cases)
         // <<91, 255, 255, 255>> "[45] == 2D == 45 type 0"
-        assert_eq!(NetId::from(0x00002D), NetId::from(0x5BFFFFFF));
+        assert_eq!(NetId::from(0x00002D), DevAddr::from(0x5BFFFFFF).netid());
         // <<173, 255, 255, 255>> "[45] == 2D == 45 type 1"
-        assert_eq!(NetId::from(0x20002D), NetId::from(0xADFFFFFF));
+        assert_eq!(NetId::from(0x20002D), DevAddr::from(0xADFFFFFF).netid());
         // <<214, 223, 255, 255>> "[1,109] == 16D == 365 type 2"
-        assert_eq!(NetId::from(0x40016D), NetId::from(0xD6DFFFFF));
+        assert_eq!(NetId::from(0x40016D), DevAddr::from(0xD6DFFFFF).netid());
         // <<235, 111, 255, 255>>), "[5,183] == 5B7 == 1463 type 3"
-        assert_eq!(NetId::from(0x6005B7), NetId::from(0xEB6FFFFF));
+        assert_eq!(NetId::from(0x6005B7), DevAddr::from(0xEB6FFFFF).netid());
         // <<245, 182, 255, 255>>), "[11, 109] == B6D == 2925 type 4"
-        assert_eq!(NetId::from(0x800B6D), NetId::from(0xF5B6FFFF));
+        assert_eq!(NetId::from(0x800B6D), DevAddr::from(0xF5B6FFFF).netid());
         // println!(
         //     "left: {:#04X?} right: {:#04X?}",
         //     0xA016DB,
         //     parse_netid(0xFADB7FFF)
         // );
         // <<250, 219, 127, 255>>), "[22,219] == 16DB == 5851 type 5"
-        assert_eq!(NetId::from(0xA016DB), NetId::from(0xFADB7FFF));
+        assert_eq!(NetId::from(0xA016DB), DevAddr::from(0xFADB7FFF).netid());
         // <<253, 109, 183, 255>> "[91, 109] == 5B6D == 23405 type 6"
-        assert_eq!(NetId::from(0xC05B6D), NetId::from(0xFD6DB7FF));
+        assert_eq!(NetId::from(0xC05B6D), DevAddr::from(0xFD6DB7FF).netid());
         // <<254, 182, 219, 127>> "[1,109,182] == 16DB6 == 93622 type 7"
-        assert_eq!(NetId::from(0xE16DB6), NetId::from(0xFEB6DB7F));
+        assert_eq!(NetId::from(0xE16DB6), DevAddr::from(0xFEB6DB7F).netid());
         println!(
             "left: {:#04X?} right: {:#04X?}",
             NetId::from(0xA016DB),
             NetId::from(0xFFFFFFFF)
         );
         // FixME - Invalid NetID type
-        assert_eq!(NetId::from(127), NetId::from(0xFFFFFFFF));
+        assert_eq!(NetId::from(127), DevAddr::from(0xFFFFFFFF).netid());
 
         // Actility spreadsheet examples
-        assert_eq!(NetId::from(0), NetId::from(0));
-        assert_eq!(NetId::from(1), NetId::from(1 << 25));
-        assert_eq!(NetId::from(2), NetId::from(1 << 26));
+        assert_eq!(NetId::from(0), DevAddr::from(0).netid());
+        assert_eq!(NetId::from(1), DevAddr::from(1 << 25).netid());
+        assert_eq!(NetId::from(2), DevAddr::from(1 << 26).netid());
 
         // Mis-parsed as netid 4 of type 3
-        assert_eq!(NetId::from(0x600004), NetId::from(0xE009ABCD));
+        assert_eq!(NetId::from(0x600004), DevAddr::from(0xE009ABCD).netid());
         // Valid DevAddr, NetID not assigned
-        assert_eq!(NetId::from(0x20002D), NetId::from(0xADFFFFFF));
+        assert_eq!(NetId::from(0x20002D), DevAddr::from(0xADFFFFFF).netid());
         // Less than 32 bit number
-        assert_eq!(NetId::from(0), NetId::from(46377));
+        assert_eq!(NetId::from(0), DevAddr::from(46377).netid());
 
         // Louis test data
-        assert_eq!(NetId::from(0x600002), NetId::from(0xE0040001));
-        assert_eq!(NetId::from(0x600002), NetId::from(0xE0052784));
-        assert_eq!(NetId::from(0x000002), NetId::from(0x0410BEA3));
+        assert_eq!(NetId::from(0x600002), DevAddr::from(0xE0040001).netid());
+        assert_eq!(NetId::from(0x600002), DevAddr::from(0xE0052784).netid());
+        assert_eq!(NetId::from(0x000002), DevAddr::from(0x0410BEA3).netid());
     }
 }
