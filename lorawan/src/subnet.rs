@@ -191,7 +191,7 @@ impl NetId {
 
 #[cfg(test)]
 
-static NETID_LIST: [NetID; 4] = [NetID(0xC00050), NetId(0xE00001), NetId(0xC00035), NetId(0x60002D)];
+static NETID_LIST: [NetId; 4] = [NetId(0xC00050), NetId(0xE00001), NetId(0xC00035), NetId(0x60002D)];
 
 mod tests {
     use super::*;
@@ -245,7 +245,7 @@ mod tests {
         array[pos..].rotate_right(1);
     }
 
-    fn exercise_subnet_list(devaddr: DevAddr, netid_list: &[NetId]) {
+    fn exercise_subnet_list(_devaddr: DevAddr, _netid_list: &[NetId]) {
         //let subnet_addr = subnet_from_devaddr(devaddr, netid_list);
         // let subnet_addr = SubnetAddr::from_devaddr(&devaddr, netid_list);
         //let devaddr_2 = devaddr_from_subnet(subnet_addr.unwrap(), netid_list);
@@ -256,14 +256,15 @@ mod tests {
 
     fn exercise_subnet(devaddr: DevAddr) {
         let netid = NetId::from(&devaddr);
-        // exercise_subnet_list(devaddr, &mutate_array(netid, &NETID_LIST, 0));
-        // exercise_subnet_list(devaddr, &mutate_array(netid, &NETID_LIST, 1));
-        // exercise_subnet_list(devaddr, &mutate_array(netid, &NETID_LIST, 2));
-        // exercise_subnet_list(devaddr, &mutate_array(netid, &NETID_LIST, 3));
+        let netid_list: [NetId; 4] = [NetId(0xC00050), NetId(0xE00001), NetId(0xC00035), NetId(0x60002D)];
+        exercise_subnet_list(devaddr, &mutate_array(netid, &netid_list, 0));
+        exercise_subnet_list(devaddr, &mutate_array(netid, &netid_list, 1));
+        exercise_subnet_list(devaddr, &mutate_array(netid, &netid_list, 2));
+        exercise_subnet_list(devaddr, &mutate_array(netid, &netid_list, 3));
         ()
     }
 
-    fn addr_bit_len(devaddr: u32) -> u32 {
+    fn addr_bit_len(_devaddr: u32) -> u32 {
         0
         //let netid = parse_netid(devaddr);
         //addr_len(netid_class(netid))
