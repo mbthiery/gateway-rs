@@ -1,12 +1,12 @@
-const RETIRED_NETID: NetId = 0x200010.into();
+const RETIRED_NETID: NetId = NetId(0x200010);
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub struct DevAddr(u32);
 
 #[derive(PartialEq, Debug)]
 pub struct SubnetAddr(u32);
 
-#[derive(PartialEq, Clone, Debug, Default)]
+#[derive(PartialEq, Clone, Copy, Debug, Default)]
 pub struct NetId(u32);
 
 #[derive(PartialEq, Debug)]
