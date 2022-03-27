@@ -41,7 +41,7 @@ impl DevAddr {
 
     /// Parse the LoRaWAN NetID
     ///
-    pub fn netid(&self) -> NetId {
+    pub fn net_id(&self) -> NetId {
         NetId::from(self)
     }
 
@@ -343,9 +343,9 @@ mod tests {
 
     fn exercise_devaddr(netid: u32, addr: u32, _id_len: u32, addr_len: u32) {
         let devaddr = DevAddr::from_nwkaddr(&NetId::from(netid), addr);
-        let netclass = NetClass::from(&devaddr.unwrap().netid());
+        let netclass = NetClass::from(&devaddr.unwrap().net_id());
         assert!(&netclass.0 <= &7);
-        let netid_2 = &DevAddr::from(devaddr.unwrap().0).netid();
+        let netid_2 = &DevAddr::from(devaddr.unwrap().0).net_id();
         assert_eq!(netid, netid_2.0);
         // let addr_len_2 = addr_bit_len(&devaddr.unwrap());
         // assert_eq!(addr_len, addr_len_2);
@@ -389,7 +389,7 @@ mod tests {
 
     #[allow(non_snake_case)]
     #[test]
-    fn test_netid() {
+    fn test_net_id() {
         // LegacyDevAddr = <<$H:7, 0:25>>,
         let LegacyNetID: NetId = RETIRED_NETID;
 
@@ -522,44 +522,44 @@ mod tests {
     fn test_id() {
         // CP data (matches Erlang test cases)
         // <<91, 255, 255, 255>> "[45] == 2D == 45 type 0"
-        assert_eq!(NetId::from(0x00002D), DevAddr::from(0x5BFFFFFF).netid());
+        assert_eq!(NetId::from(0x00002D), DevAddr::from(0x5BFFFFFF).net_id());
         // <<173, 255, 255, 255>> "[45] == 2D == 45 type 1"
-        assert_eq!(NetId::from(0x20002D), DevAddr::from(0xADFFFFFF).netid());
+        assert_eq!(NetId::from(0x20002D), DevAddr::from(0xADFFFFFF).net_id());
         // <<214, 223, 255, 255>> "[1,109] == 16D == 365 type 2"
-        assert_eq!(NetId::from(0x40016D), DevAddr::from(0xD6DFFFFF).netid());
+        assert_eq!(NetId::from(0x40016D), DevAddr::from(0xD6DFFFFF).net_id());
         // <<235, 111, 255, 255>>), "[5,183] == 5B7 == 1463 type 3"
-        assert_eq!(NetId::from(0x6005B7), DevAddr::from(0xEB6FFFFF).netid());
+        assert_eq!(NetId::from(0x6005B7), DevAddr::from(0xEB6FFFFF).net_id());
         // <<245, 182, 255, 255>>), "[11, 109] == B6D == 2925 type 4"
-        assert_eq!(NetId::from(0x800B6D), DevAddr::from(0xF5B6FFFF).netid());
+        assert_eq!(NetId::from(0x800B6D), DevAddr::from(0xF5B6FFFF).net_id());
         // <<250, 219, 127, 255>>), "[22,219] == 16DB == 5851 type 5"
-        assert_eq!(NetId::from(0xA016DB), DevAddr::from(0xFADB7FFF).netid());
+        assert_eq!(NetId::from(0xA016DB), DevAddr::from(0xFADB7FFF).net_id());
         // <<253, 109, 183, 255>> "[91, 109] == 5B6D == 23405 type 6"
-        assert_eq!(NetId::from(0xC05B6D), DevAddr::from(0xFD6DB7FF).netid());
+        assert_eq!(NetId::from(0xC05B6D), DevAddr::from(0xFD6DB7FF).net_id());
         // <<254, 182, 219, 127>> "[1,109,182] == 16DB6 == 93622 type 7"
-        assert_eq!(NetId::from(0xE16DB6), DevAddr::from(0xFEB6DB7F).netid());
+        assert_eq!(NetId::from(0xE16DB6), DevAddr::from(0xFEB6DB7F).net_id());
         println!(
             "left: {:#04X?} right: {:#04X?}",
             NetId::from(0xA016DB),
             NetId::from(0xFFFFFFFF)
         );
         // FixME - Invalid NetID type
-        assert_eq!(NetId::from(127), DevAddr::from(0xFFFFFFFF).netid());
+        assert_eq!(NetId::from(127), DevAddr::from(0xFFFFFFFF).net_id());
 
         // Actility spreadsheet examples
-        assert_eq!(NetId::from(0), DevAddr::from(0).netid());
-        assert_eq!(NetId::from(1), DevAddr::from(1 << 25).netid());
-        assert_eq!(NetId::from(2), DevAddr::from(1 << 26).netid());
+        assert_eq!(NetId::from(0), DevAddr::from(0).net_id());
+        assert_eq!(NetId::from(1), DevAddr::from(1 << 25).net_id());
+        assert_eq!(NetId::from(2), DevAddr::from(1 << 26).net_id());
 
         // Mis-parsed as netid 4 of type 3
-        assert_eq!(NetId::from(0x600004), DevAddr::from(0xE009ABCD).netid());
+        assert_eq!(NetId::from(0x600004), DevAddr::from(0xE009ABCD).net_id());
         // Valid DevAddr, NetID not assigned
-        assert_eq!(NetId::from(0x20002D), DevAddr::from(0xADFFFFFF).netid());
+        assert_eq!(NetId::from(0x20002D), DevAddr::from(0xADFFFFFF).net_id());
         // Less than 32 bit number
-        assert_eq!(NetId::from(0), DevAddr::from(46377).netid());
+        assert_eq!(NetId::from(0), DevAddr::from(46377).net_id());
 
         // Louis test data
-        assert_eq!(NetId::from(0x600002), DevAddr::from(0xE0040001).netid());
-        assert_eq!(NetId::from(0x600002), DevAddr::from(0xE0052784).netid());
-        assert_eq!(NetId::from(0x000002), DevAddr::from(0x0410BEA3).netid());
+        assert_eq!(NetId::from(0x600002), DevAddr::from(0xE0040001).net_id());
+        assert_eq!(NetId::from(0x600002), DevAddr::from(0xE0052784).net_id());
+        assert_eq!(NetId::from(0x000002), DevAddr::from(0x0410BEA3).net_id());
     }
 }
