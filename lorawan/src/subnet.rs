@@ -114,20 +114,6 @@ impl DevAddr {
             let netclass: u32 = netid >> 21;
             netclass
         }
-        fn var_net_class(netclass: &NetClass) -> u32 {
-            let idlen = netclass.id_len();
-            match netclass.0 {
-                0 => 0,
-                1 => 0b10u32 << idlen,
-                2 => 0b110u32 << idlen,
-                3 => 0b1110u32 << idlen,
-                4 => 0b11110u32 << idlen,
-                5 => 0b111110u32 << idlen,
-                6 => 0b1111110u32 << idlen,
-                7 => 0b11111110u32 << idlen,
-                _ => 0,
-            }
-        }
         fn addr_len(netclass: u8) -> u32 {
             *[25, 24, 20, 17, 15, 13, 10, 7]
                 .get(netclass as usize)
@@ -137,7 +123,7 @@ impl DevAddr {
             addr << addr_len(netclass.0)
         }
         let netclass = NetClass::from(netid);
-        let addr = var_net_class(&netclass) | **netid;
+        let addr = netclass.var_net_class() | **netid;
         Some((var_netid(&netclass, addr) | nwkaddr).into())
     }
 }
@@ -165,6 +151,21 @@ impl NetClass {
     fn id_len(&self) -> u32 {
         const ID_LEN: &[u8] = &[6, 6, 9, 11, 12, 13, 15, 17];
         *ID_LEN.get(self.0 as usize).unwrap_or(&0) as u32
+    }
+
+    fn var_net_class(&self) -> u32 {
+        let idlen = self.id_len();
+        match self.0 {
+            0 => 0,
+            1 => 0b10u32 << idlen,
+            2 => 0b110u32 << idlen,
+            3 => 0b1110u32 << idlen,
+            4 => 0b11110u32 << idlen,
+            5 => 0b111110u32 << idlen,
+            6 => 0b1111110u32 << idlen,
+            7 => 0b11111110u32 << idlen,
+            _ => 0,
+        }
     }
 }
 
@@ -237,27 +238,12 @@ impl NetId {
     }
 
     fn to_devaddr(&self, nwkaddr: u32) -> DevAddr {
-        fn var_net_class(netclass: &NetClass) -> u32 {
-            let idlen = netclass.id_len();
-            match netclass.0 {
-                0 => 0,
-                1 => 0b10u32 << idlen,
-                2 => 0b110u32 << idlen,
-                3 => 0b1110u32 << idlen,
-                4 => 0b11110u32 << idlen,
-                5 => 0b111110u32 << idlen,
-                6 => 0b1111110u32 << idlen,
-                7 => 0b11111110u32 << idlen,
-                _ => 0,
-            }
-        }
-
         fn var_netid(netclass: &NetClass, netid: u32) -> u32 {
             netid << netclass.addr_len()
         }
 
         let netclass = NetClass::from(self);
-        let addr = var_net_class(&netclass) | self.0;
+        let addr = netclass.var_net_class() | self.0;
         DevAddr(var_netid(&netclass, addr) | nwkaddr)
     }
 
