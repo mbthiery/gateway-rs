@@ -318,12 +318,9 @@ mod tests {
 
     fn mutate_array(item: NetId, src: &[NetId], pos: usize) -> [NetId; 4] {
         let mut dst = [NetId(0), NetId(0), NetId(0), NetId(0)];
-        //println!("src is: {:#04X?}", src);
         //dst.clone_from_slice(&src[4..]);
         dst.clone_from_slice(src);
         dst[pos] = item;
-        //println!("src is: {:#04X?}", src);
-        //println!("dst is: {:#04X?}", dst);
         dst.clone()
     }
 
@@ -335,13 +332,10 @@ mod tests {
         array[pos..].rotate_right(1);
     }
 
-    fn exercise_subnet_list(_devaddr: DevAddr, _netid_list: &[NetId]) {
-        //let subnet_addr = subnet_from_devaddr(devaddr, netid_list);
-        // let subnet_addr = SubnetAddr::from_devaddr(&devaddr, netid_list);
-        //let devaddr_2 = devaddr_from_subnet(subnet_addr.unwrap(), netid_list);
-        // let devaddr_2 = DevAddr::from_subnet(Some(&subnet_addr), netid_list);
-        //assert_eq!(devaddr, devaddr_2);
-        ()
+    fn exercise_subnet_list(devaddr: DevAddr, netid_list: &[NetId]) {
+        let subnet_addr = SubnetAddr::from_devaddr(&devaddr, netid_list);
+        let devaddr_2 = DevAddr::from_subnet(&subnet_addr.unwrap(), netid_list);
+        assert_eq!(devaddr, devaddr_2.unwrap())
     }
 
     fn exercise_subnet(devaddr: DevAddr) {
@@ -362,19 +356,12 @@ mod tests {
     fn addr_bit_len(devaddr: &DevAddr) -> u32 {
         let netid: NetId = devaddr.into();
         let netclass = NetClass::from(&netid);
-        // let addr_len = netclass.addr_bit_len();
         let addr_len = netclass.addr_len();
         addr_len
     }
 
     #[test]
     fn test_exercise() {
-        // let netid_1 = create_netid(0x2, 123) as u32;
-        // println!("NetID_1_a is: {:#04X?}", netid_1);
-        // let netids = mock_random_netids();
-        // println!("devaddr is: {:#04X?}", 123);
-        // println!("netids is: {:#04X?}", netids);
-        assert_eq!(7, 7);
         let dev_addr_01: DevAddr = 0xFC00D410.into();
         exercise_subnet(dev_addr_01)
     }
@@ -523,11 +510,6 @@ mod tests {
         assert_eq!(NetId::from(0x6005B7), DevAddr::from(0xEB6FFFFF).netid());
         // <<245, 182, 255, 255>>), "[11, 109] == B6D == 2925 type 4"
         assert_eq!(NetId::from(0x800B6D), DevAddr::from(0xF5B6FFFF).netid());
-        // println!(
-        //     "left: {:#04X?} right: {:#04X?}",
-        //     0xA016DB,
-        //     parse_netid(0xFADB7FFF)
-        // );
         // <<250, 219, 127, 255>>), "[22,219] == 16DB == 5851 type 5"
         assert_eq!(NetId::from(0xA016DB), DevAddr::from(0xFADB7FFF).netid());
         // <<253, 109, 183, 255>> "[91, 109] == 5B6D == 23405 type 6"
