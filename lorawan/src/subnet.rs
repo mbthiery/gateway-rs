@@ -108,6 +108,40 @@ impl SubnetAddr {
 // Note - function and var names correspond closely to the LoRaWAN spec.
 //
 
+impl DevAddr {
+    fn from_nwkaddr(netid: &NetId, nwkaddr: u32) -> Option<Self> {
+        fn netid_class(netid: u32) -> u32 {
+            let netclass: u32 = netid >> 21;
+            netclass
+        }
+        fn var_net_class(netclass: &NetClass) -> u32 {
+            let idlen = netclass.id_len();
+            match netclass.0 {
+                0 => 0,
+                1 => 0b10u32 << idlen,
+                2 => 0b110u32 << idlen,
+                3 => 0b1110u32 << idlen,
+                4 => 0b11110u32 << idlen,
+                5 => 0b111110u32 << idlen,
+                6 => 0b1111110u32 << idlen,
+                7 => 0b11111110u32 << idlen,
+                _ => 0,
+            }
+        }
+        fn addr_len(netclass: u8) -> u32 {
+            *[25, 24, 20, 17, 15, 13, 10, 7]
+                .get(netclass as usize)
+                .unwrap_or(&0)
+        }
+        fn var_netid(netclass: &NetClass, addr: u32) -> u32 {
+            addr << addr_len(netclass.0)
+        }
+        let netclass = NetClass::from(netid);
+        let addr = var_net_class(&netclass) | **netid;
+        Some((var_netid(&netclass, addr) | nwkaddr).into())
+    }
+}
+
 impl From<&NetId> for NetClass {
     fn from(netid: &NetId) -> Self {
         Self((netid.0 >> 21) as u8)
@@ -236,45 +270,6 @@ impl NetId {
 }
 
 #[cfg(test)]
-
-impl DevAddr {
-    pub fn from_nwkaddr(netid: &NetId, nwkaddr: u32) -> Option<Self> {
-        fn netid_class(netid: u32) -> u32 {
-            let netclass: u32 = netid >> 21;
-            netclass
-        }
-        fn var_net_class(netclass: u32) -> u32 {
-            fn id_len(netclass: u32) -> u32 {
-                *[6, 6, 9, 11, 12, 13, 15, 17]
-                    .get(netclass as usize)
-                    .unwrap_or(&0)
-            }
-            let idlen = id_len(netclass);
-            match netclass {
-                0 => 0,
-                1 => 0b10u32 << idlen,
-                2 => 0b110u32 << idlen,
-                3 => 0b1110u32 << idlen,
-                4 => 0b11110u32 << idlen,
-                5 => 0b111110u32 << idlen,
-                6 => 0b1111110u32 << idlen,
-                7 => 0b11111110u32 << idlen,
-                _ => 0,
-            }
-        }
-        fn addr_len(netclass: u32) -> u32 {
-            *[25, 24, 20, 17, 15, 13, 10, 7]
-                .get(netclass as usize)
-                .unwrap_or(&0)
-        }
-        fn var_netid(netclass: u32, netid: u32) -> u32 {
-            netid << addr_len(netclass)
-        }
-        let netclass = netid_class(**netid);
-        let addr = var_net_class(netclass) | **netid;
-        Some((var_netid(netclass, addr) | nwkaddr).into())
-    }
-}
 
 static NETID_LIST: [NetId; 4] = [
     NetId(0xC00050),
