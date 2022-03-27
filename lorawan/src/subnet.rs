@@ -355,6 +355,46 @@ mod tests {
         addr_len
     }
 
+    fn exercise_devaddr(netid: u32, addr: u32, _id_len: u32, addr_len: u32) {
+        let devaddr = DevAddr::from_nwkaddr(&NetId::from(netid), addr);
+        let netclass = NetClass::from(&devaddr.unwrap().netid());
+        assert!(&netclass.0 <= &7);
+        let netid_2 = &DevAddr::from(devaddr.unwrap().0).netid();
+        assert_eq!(netid, netid_2.0);
+        // let addr_len_2 = addr_bit_len(&devaddr.unwrap());
+        // assert_eq!(addr_len, addr_len_2);
+        // NwkAddr = nwk_addr(DevAddr),
+        // ?assertEqual(Addr, NwkAddr),
+        exercise_subnet(devaddr.unwrap());
+        // random_subnet(DevAddr),
+        ()
+    }
+
+    fn exercise_netid(netclass: u32, id: u32, id_len: u32, addr_len: u32) {
+        let netid = (netclass << 21) & id;
+        //MaxNetSize = netid_size(NetID),
+        exercise_devaddr(netid, 0, id_len, addr_len);
+        exercise_devaddr(netid, 1, id_len, addr_len);
+        exercise_devaddr(netid, 8, id_len, addr_len);
+        exercise_devaddr(netid, 16, id_len, addr_len);
+        exercise_devaddr(netid, 32, id_len, addr_len);
+        exercise_devaddr(netid, 33, id_len, addr_len);
+        exercise_devaddr(netid, 64, id_len, addr_len);
+        //exercise_devaddr(netid, MaxNetSize - 1, id_len, addr_len);
+    }
+
+    #[test]
+    fn test_exercise_devaddr() {
+        exercise_netid(7, 2, 17, 7);
+        exercise_netid(6, 2, 15, 10);
+        exercise_netid(5, 2, 13, 13);
+        exercise_netid(4, 2, 12, 15);
+        exercise_netid(3, 2, 11, 17);
+        exercise_netid(2, 2, 9, 20);
+        exercise_netid(1, 2, 6, 24);
+        exercise_netid(0, 2, 6, 25);
+    }
+
     #[test]
     fn test_exercise() {
         let dev_addr_01: DevAddr = 0xFC00D410.into();
