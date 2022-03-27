@@ -110,17 +110,8 @@ impl SubnetAddr {
 
 impl DevAddr {
     fn from_nwkaddr(netid: &NetId, nwkaddr: u32) -> Option<Self> {
-        fn netid_class(netid: u32) -> u32 {
-            let netclass: u32 = netid >> 21;
-            netclass
-        }
-        fn addr_len(netclass: u8) -> u32 {
-            *[25, 24, 20, 17, 15, 13, 10, 7]
-                .get(netclass as usize)
-                .unwrap_or(&0)
-        }
         fn var_netid(netclass: &NetClass, addr: u32) -> u32 {
-            addr << addr_len(netclass.0)
+            addr << netclass.addr_len()
         }
         let netclass = NetClass::from(netid);
         let addr = netclass.var_net_class() | **netid;
@@ -257,13 +248,6 @@ impl NetId {
 
 #[cfg(test)]
 
-static NETID_LIST: [NetId; 4] = [
-    NetId(0xC00050),
-    NetId(0xE00001),
-    NetId(0xC00035),
-    NetId(0x60002D),
-];
-
 mod tests {
     use super::*;
     use rand::Rng;
@@ -271,7 +255,7 @@ mod tests {
     fn create_netid(netclass: u8, id: u32) -> NetId {
         NetId(((netclass as u32) << 21) | id)
     }
-
+/*
     fn mock_random_netids() -> Vec<NetId> {
         let mut rng = rand::thread_rng();
         // Len = rand:uniform(10),
@@ -296,7 +280,7 @@ mod tests {
     fn copy_slice(dst: &mut [u8], src: &[u8]) -> usize {
         dst.iter_mut().zip(src).map(|(x, y)| *x = *y).count()
     }
-
+*/
     fn mutate_array(item: NetId, src: &[NetId], pos: usize) -> [NetId; 4] {
         let mut dst = [NetId(0), NetId(0), NetId(0), NetId(0)];
         //dst.clone_from_slice(&src[4..]);
@@ -304,7 +288,7 @@ mod tests {
         dst[pos] = item;
         dst.clone()
     }
-
+/*
     fn insert_rand<T>(item: T, array: &mut [T]) {
         let mut rng = rand::thread_rng();
         let alen = array.len();
@@ -312,7 +296,7 @@ mod tests {
         *array.last_mut().unwrap() = item;
         array[pos..].rotate_right(1);
     }
-
+*/
     fn exercise_subnet_list(devaddr: DevAddr, netid_list: &[NetId]) {
         let subnet_addr = SubnetAddr::from_devaddr(&devaddr, netid_list);
         let devaddr_2 = DevAddr::from_subnet(&subnet_addr.unwrap(), netid_list);
@@ -334,6 +318,19 @@ mod tests {
         ()
     }
 
+    fn random_subnet(devaddr: &DevAddr) {
+        let mut rng = rand::thread_rng();
+        let _netid: NetId = devaddr.into();
+        let _netids = (0..10)
+            .map(|_| {
+                let id = rng.gen_range(0..65);
+                let netclass = rng.gen_range(0..8);
+                create_netid(netclass, id)
+            })
+            .collect::<Vec<NetId>>();
+        ()
+    }
+
     fn addr_bit_len(devaddr: &DevAddr) -> u32 {
         let netid: NetId = devaddr.into();
         let netclass = NetClass::from(&netid);
@@ -341,7 +338,7 @@ mod tests {
         addr_len
     }
 
-    fn exercise_devaddr(netid: u32, addr: u32, _id_len: u32, addr_len: u32) {
+    fn exercise_devaddr(netid: u32, addr: u32, _id_len: u32, _addr_len: u32) {
         let devaddr = DevAddr::from_nwkaddr(&NetId::from(netid), addr);
         let netclass = NetClass::from(&devaddr.unwrap().net_id());
         assert!(&netclass.0 <= &7);
@@ -352,7 +349,7 @@ mod tests {
         // NwkAddr = nwk_addr(DevAddr),
         // ?assertEqual(Addr, NwkAddr),
         exercise_subnet(devaddr.unwrap());
-        // random_subnet(DevAddr),
+        random_subnet(&devaddr.unwrap());
         ()
     }
 
