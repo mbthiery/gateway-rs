@@ -154,7 +154,7 @@ impl From<&DevAddr> for NetId {
 
 impl From<u32> for NetId {
     fn from(v: u32) -> Self {
-        Self(v & 0b111111111111111111111)
+        Self(v & 0b111111111111111111111111)
     }
 }
 
@@ -401,11 +401,11 @@ mod tests {
         assert_eq!(10, NetWidth1);
         let NetWidth2 = NetID02.netid_class().addr_len();
         assert_eq!(17, NetWidth2);
-        let NetSize0 = NetID00.netid_class().id_len();
+        let NetSize0 = NetID00.size();
         assert_eq!(128, NetSize0);
-        let NetSize1 = NetID01.netid_class().id_len();
+        let NetSize1 = NetID01.size();
         assert_eq!(1024, NetSize1);
-        let NetSize2 = NetID02.netid_class().id_len();
+        let NetSize2 = NetID02.size();
         assert_eq!(131072, NetSize2);
 
         let NetIDList: Vec<NetId> = vec![NetID00, NetID01, NetID02];
