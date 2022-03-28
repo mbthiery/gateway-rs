@@ -173,8 +173,8 @@ impl From<&DevAddr> for NetId {
 
 impl From<u32> for NetId {
     fn from(v: u32) -> Self {
-        assert!((v & 0xFF000000) == 0);
-        Self(v & 0b111111111111111111111111)
+        // NetIds are limited by spec to 24 bits
+        Self(v & 0x00FFFFFF)
     }
 }
 
