@@ -108,14 +108,6 @@ impl SubnetAddr {
 // Note - function and var names correspond closely to the LoRaWAN spec.
 //
 
-impl DevAddr {
-    fn from_nwkaddr(netid: &NetId, nwkaddr: u32) -> Option<Self> {
-        let netclass = NetClass::from(netid);
-        let addr = netclass.var_net_class() | **netid;
-        Some((netclass.var_netid(addr) | nwkaddr).into())
-    }
-}
-
 impl From<&NetId> for NetClass {
     fn from(netid: &NetId) -> Self {
         Self((netid.0 >> 21) as u8)
@@ -354,17 +346,18 @@ mod tests {
     }
 
     fn exercise_devaddr(netid: u32, addr: u32, _id_len: u32, _addr_len: u32) {
-        let devaddr = DevAddr::from_nwkaddr(&NetId::from(netid), addr);
-        let netclass = NetClass::from(&devaddr.unwrap().net_id());
+        let devaddr: DevAddr = NetId::from(netid).to_devaddr(addr);
+        //let devaddr = DevAddr::from_nwkaddr(&NetId::from(netid), addr);
+        let netclass = NetClass::from(&devaddr.net_id());
         assert!(&netclass.0 <= &7);
-        let netid_2 = &DevAddr::from(devaddr.unwrap().0).net_id();
+        let netid_2 = &DevAddr::from(devaddr.0).net_id();
         assert_eq!(netid, netid_2.0);
         // let addr_len_2 = addr_bit_len(&devaddr.unwrap());
         // assert_eq!(addr_len, addr_len_2);
         // NwkAddr = nwk_addr(DevAddr),
         // ?assertEqual(Addr, NwkAddr),
-        exercise_subnet(devaddr.unwrap());
-        random_subnet(&devaddr.unwrap());
+        exercise_subnet(devaddr);
+        random_subnet(&devaddr);
         ()
     }
 
@@ -463,11 +456,11 @@ mod tests {
         assert!(!NetIDExt.is_local(&NetIDList));
         assert!(LegacyNetID.is_local(&NetIDList));
 
-        let DevAddrLegacy = DevAddr::from_nwkaddr(&LegacyNetID, 0).expect("dev_addr");
+        let DevAddrLegacy = LegacyNetID.to_devaddr(0);
         assert_eq!(DevAddr00, DevAddrLegacy);
-        let DevAddr1 = DevAddr::from_nwkaddr(&NetID01, 16).expect("dev_addr");
+        let DevAddr1 = NetID01.to_devaddr(16);
         assert_eq!(DevAddr01, DevAddr1);
-        let DevAddr2 = DevAddr::from_nwkaddr(&NetID02, 8).expect("dev_addr");
+        let DevAddr2 = NetID02.to_devaddr(8);
         assert_eq!(DevAddr02, DevAddr2);
 
         let NetIDType00 = DevAddr00.net_class();
