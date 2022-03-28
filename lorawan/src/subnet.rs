@@ -249,10 +249,17 @@ mod tests {
     use super::*;
     use rand::Rng;
 
+    fn random_netid() -> NetId {
+        let mut rng = rand::thread_rng();
+        let id = rng.gen_range(0..65);
+        let netclass: u8 = rng.gen_range(0..8).into();
+        create_netid(netclass, id)
+    }
+
     fn create_netid(netclass: u8, id: u32) -> NetId {
         NetId(((netclass as u32) << 21) | id)
     }
-/*
+
     fn mock_random_netids() -> Vec<NetId> {
         let mut rng = rand::thread_rng();
         // Len = rand:uniform(10),
@@ -268,16 +275,16 @@ mod tests {
         netids
     }
 
-    fn insert_item<T>(item: T, array: &'static mut [T], pos: usize) -> &'static mut [T] {
+    fn insert_item<T>(item: T, array: &mut [T], pos: usize) -> &[T] {
         *array.last_mut().unwrap() = item;
         array[pos..].rotate_right(1);
         array
     }
 
-    fn copy_slice(dst: &mut [u8], src: &[u8]) -> usize {
+    fn copy_slice(dst: &mut [NetId], src: &[NetId]) -> usize {
         dst.iter_mut().zip(src).map(|(x, y)| *x = *y).count()
     }
-*/
+
     fn mutate_array(item: NetId, src: &[NetId], pos: usize) -> [NetId; 4] {
         let mut dst = [NetId(0), NetId(0), NetId(0), NetId(0)];
         //dst.clone_from_slice(&src[4..]);
@@ -285,15 +292,7 @@ mod tests {
         dst[pos] = item;
         dst.clone()
     }
-/*
-    fn insert_rand<T>(item: T, array: &mut [T]) {
-        let mut rng = rand::thread_rng();
-        let alen = array.len();
-        let pos: usize = rng.gen_range(0..alen) as usize;
-        *array.last_mut().unwrap() = item;
-        array[pos..].rotate_right(1);
-    }
-*/
+
     fn exercise_subnet_list(devaddr: DevAddr, netid_list: &[NetId]) {
         let subnet_addr = SubnetAddr::from_devaddr(&devaddr, netid_list);
         let devaddr_2 = DevAddr::from_subnet(&subnet_addr.unwrap(), netid_list);
@@ -317,8 +316,27 @@ mod tests {
 
     fn random_subnet(devaddr: &DevAddr) {
         let mut rng = rand::thread_rng();
-        let _netid: NetId = devaddr.into();
-        let _netids = (0..10)
+        let netid: NetId = devaddr.into();
+        let netid_list: [NetId; 4] = [
+            NetId(0xC00050),
+            NetId(0xE00001),
+            NetId(0xC00035),
+            NetId(0x60002D),
+        ];
+        for pos in 0..4 {
+            exercise_subnet_list(*devaddr, &mutate_array(netid, &netid_list, pos));
+        }
+        for _item in 0..100 {
+            let r_pos = rng.gen_range(0..4);
+            let r_id = rng.gen_range(0..65);
+            let r_netclass = rng.gen_range(0..8);
+            let r_netid = create_netid(r_netclass, r_id);
+            let new_list = mutate_array(r_netid, &netid_list, r_pos);
+            for pos in 0..4 {
+                exercise_subnet_list(*devaddr, &mutate_array(netid, &new_list, pos));
+            }
+        }
+        let _netids = (0..2)
             .map(|_| {
                 let id = rng.gen_range(0..65);
                 let netclass = rng.gen_range(0..8);
@@ -361,6 +379,36 @@ mod tests {
         exercise_devaddr(netid, 33, id_len, addr_len);
         exercise_devaddr(netid, 64, id_len, addr_len);
         //exercise_devaddr(netid, MaxNetSize - 1, id_len, addr_len);
+    }
+
+    #[test]
+    fn test_utils() {
+        let rand_netid = random_netid();
+        println!("rand_netid: {:#04X?}", rand_netid);
+        for _item in 0..10 {
+            let netid = random_netid();
+            println!("netid: {:#04X?}", netid);
+        }
+        let mock_ids = mock_random_netids();
+        println!("mock_ids: {:#04X?}", mock_ids);
+        let mut netid_list: [NetId; 4] = [
+            NetId(0xC00050),
+            NetId(0xE00001),
+            NetId(0xC00035),
+            NetId(0x60002D),
+        ];
+        let m_list = insert_item::<NetId>(0xE00001.into(), &mut netid_list, 2);
+        println!("m_list: {:#04X?}", m_list);
+        let mut netid_list_2: [NetId; 4] = [
+            NetId(0xC00050),
+            NetId(0xE00001),
+            NetId(0xC00035),
+            NetId(0x60002D),
+        ];
+        let size = copy_slice(&mut netid_list_2, &m_list);
+        println!("size: {:#04X?}", size);
+        assert_eq!(1, 1);
+        ()
     }
 
     #[test]
