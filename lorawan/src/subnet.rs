@@ -173,6 +173,7 @@ impl From<&DevAddr> for NetId {
 
 impl From<u32> for NetId {
     fn from(v: u32) -> Self {
+        assert!((v & 0xFF000000) == 0);
         Self(v & 0b111111111111111111111111)
     }
 }
@@ -572,11 +573,11 @@ mod tests {
         assert_eq!(NetId::from(0xC05B6D), DevAddr::from(0xFD6DB7FF).net_id());
         // <<254, 182, 219, 127>> "[1,109,182] == 16DB6 == 93622 type 7"
         assert_eq!(NetId::from(0xE16DB6), DevAddr::from(0xFEB6DB7F).net_id());
-        println!(
-            "left: {:#04X?} right: {:#04X?}",
-            NetId::from(0xA016DB),
-            NetId::from(0xFFFFFFFF)
-        );
+        // println!(
+        //     "left: {:#04X?} right: {:#04X?}",
+        //     NetId::from(0xA016DB),
+        //     NetId::from(0xFFFFFFFF)
+        // );
         // FixME - Invalid NetID type
         assert_eq!(NetId::from(127), DevAddr::from(0xFFFFFFFF).net_id());
 
