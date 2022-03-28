@@ -110,12 +110,9 @@ impl SubnetAddr {
 
 impl DevAddr {
     fn from_nwkaddr(netid: &NetId, nwkaddr: u32) -> Option<Self> {
-        fn var_netid(netclass: &NetClass, addr: u32) -> u32 {
-            addr << netclass.addr_len()
-        }
         let netclass = NetClass::from(netid);
         let addr = netclass.var_net_class() | **netid;
-        Some((var_netid(&netclass, addr) | nwkaddr).into())
+        Some((netclass.var_netid(addr) | nwkaddr).into())
     }
 }
 
@@ -157,6 +154,10 @@ impl NetClass {
             7 => 0b11111110u32 << idlen,
             _ => 0,
         }
+    }
+
+    fn var_netid(&self, addr: u32) -> u32 {
+        addr << self.addr_len()
     }
 }
 
@@ -229,13 +230,9 @@ impl NetId {
     }
 
     fn to_devaddr(&self, nwkaddr: u32) -> DevAddr {
-        fn var_netid(netclass: &NetClass, netid: u32) -> u32 {
-            netid << netclass.addr_len()
-        }
-
         let netclass = NetClass::from(self);
         let addr = netclass.var_net_class() | self.0;
-        DevAddr(var_netid(&netclass, addr) | nwkaddr)
+        DevAddr(netclass.var_netid(addr) | nwkaddr)
     }
 
     fn from_subnet_addr(subnetaddr: &SubnetAddr, netid_list: &[NetId]) -> Option<Self> {
