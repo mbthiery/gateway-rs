@@ -217,7 +217,7 @@ impl NetId {
         1 << NetClass::from(self).addr_len()
     }
 
-    fn netid_class(&self) -> NetClass {
+    pub fn net_class(&self) -> NetClass {
         NetClass::from(self)
     }
 
@@ -438,11 +438,11 @@ mod tests {
         let DevAddr01: DevAddr = 0xFC00D410.into();
         let DevAddr02: DevAddr = 0xE05A0008.into();
 
-        let NetWidth0 = NetID00.netid_class().addr_len();
+        let NetWidth0 = NetID00.net_class().addr_len();
         assert_eq!(7, NetWidth0);
-        let NetWidth1 = NetID01.netid_class().addr_len();
+        let NetWidth1 = NetID01.net_class().addr_len();
         assert_eq!(10, NetWidth1);
-        let NetWidth2 = NetID02.netid_class().addr_len();
+        let NetWidth2 = NetID02.net_class().addr_len();
         assert_eq!(17, NetWidth2);
         let NetSize0 = NetID00.size();
         assert_eq!(128, NetSize0);
