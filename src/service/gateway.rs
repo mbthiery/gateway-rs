@@ -1,4 +1,7 @@
-use crate::{service::CONNECT_TIMEOUT, Error, KeyedUri, MsgSign, MsgVerify, Region, Result};
+use crate::{
+    service::{CONNECT_TIMEOUT, RPC_TIMEOUT},
+    Error, KeyedUri, MsgSign, MsgVerify, Region, Result,
+};
 use helium_crypto::{Keypair, PublicKey};
 use helium_proto::{
     gateway_resp_v1,
@@ -6,7 +9,7 @@ use helium_proto::{
     BlockchainTxnStateChannelCloseV1, BlockchainVarV1, GatewayConfigReqV1, GatewayConfigRespV1,
     GatewayRegionParamsUpdateReqV1, GatewayRespV1, GatewayRoutingReqV1, GatewayScCloseReqV1,
     GatewayScFollowReqV1, GatewayScFollowStreamedRespV1, GatewayScIsActiveReqV1,
-    GatewayScIsActiveRespV1, Routing,
+    GatewayScIsActiveRespV1, GatewayValidatorsReqV1, GatewayValidatorsRespV1, Routing,
 };
 use rand::{rngs::OsRng, seq::SliceRandom};
 use std::{sync::Arc, time::Duration};
@@ -116,7 +119,8 @@ pub struct GatewayService {
 impl GatewayService {
     pub fn new(keyed_uri: KeyedUri) -> Result<Self> {
         let channel = Endpoint::from(keyed_uri.uri.clone())
-            .timeout(Duration::from_secs(CONNECT_TIMEOUT))
+            .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT))
+            .timeout(Duration::from_secs(RPC_TIMEOUT))
             .connect_lazy();
         Ok(Self {
             uri: keyed_uri,
@@ -124,11 +128,16 @@ impl GatewayService {
         })
     }
 
-    pub fn random_new(uris: &[KeyedUri]) -> Result<Self> {
-        let uri = uris
+    pub async fn random_new(seed_uris: &[KeyedUri]) -> Result<Self> {
+        let seed_uri = seed_uris
             .choose(&mut OsRng)
             .ok_or_else(|| Error::custom("empty uri list"))?;
-        Self::new(uri.to_owned())
+        let mut seed_gateway = Self::new(seed_uri.to_owned())?;
+        let mut gateways = seed_gateway.validators(1).await?;
+        gateways
+            .pop()
+            .ok_or_else(|| Error::custom("empty gateway list"))
+            .and_then(Self::new)
     }
 
     pub async fn routing(&mut self, height: u64) -> Result<Streaming> {
@@ -220,5 +229,23 @@ impl GatewayService {
     pub async fn height(&mut self) -> Result<(u64, u64)> {
         let resp = self.get_config(vec![]).await?;
         Ok((resp.height, resp.block_age))
+    }
+
+    pub async fn validators(&mut self, quantity: u32) -> Result<Vec<KeyedUri>> {
+        let resp = self
+            .client
+            .validators(GatewayValidatorsReqV1 { quantity })
+            .await?
+            .into_inner();
+        resp.verify(&self.uri.pubkey)?;
+        match resp.msg {
+            Some(gateway_resp_v1::Msg::ValidatorsResp(GatewayValidatorsRespV1 { result })) => {
+                result.into_iter().map(KeyedUri::try_from).collect()
+            }
+            Some(other) => Err(Error::custom(format!(
+                "invalid validator response {other:?}"
+            ))),
+            None => Err(Error::custom("empty validator response")),
+        }
     }
 }

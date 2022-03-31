@@ -85,7 +85,7 @@ pub struct Dispatcher {
     region: Region,
     messages: MessageReceiver,
     downlinks: gateway::MessageSender,
-    gateways: Vec<KeyedUri>,
+    seed_gateways: Vec<KeyedUri>,
     routing_height: u64,
     region_height: u64,
     default_router: KeyedUri,
@@ -122,7 +122,7 @@ impl Dispatcher {
         downlinks: gateway::MessageSender,
         settings: &Settings,
     ) -> Result<Self> {
-        let gateways = settings.gateways.clone();
+        let seed_gateways = settings.gateways.clone();
         let routers = HashMap::with_capacity(5);
         let default_router = settings.default_router().clone();
         let cache_settings = settings.cache.clone();
@@ -131,7 +131,7 @@ impl Dispatcher {
             region: settings.region,
             messages,
             downlinks,
-            gateways,
+            seed_gateways,
             routers,
             routing_height: 0,
             region_height: 0,
@@ -156,29 +156,23 @@ impl Dispatcher {
             GATEWAY_BACKOFF_MAX_WAIT,
         );
         loop {
-            let gateway = GatewayService::random_new(&self.gateways)?;
-            info!(logger, "using gateway";
-                "pubkey" => gateway.uri.pubkey.to_string(),
-                "uri" => gateway.uri.uri.to_string());
             tokio::select! {
                 _ = shutdown.clone() => {
                     info!(logger, "shutting down");
                     return Ok(())
                 },
-                gateway_streams = Self::gateway_streams(gateway.clone(), self.routing_height, self.keypair.clone()) => {
-                    match gateway_streams {
-                        Ok((routing_stream, region_stream)) => self.run_with_gateway_streams(gateway, routing_stream, region_stream, shutdown.clone(), &logger).await?,
-                        Err(err) => warn!(logger, "gateway error: {err:?}")
+                gateway = GatewayService::random_new(&self.seed_gateways) => match gateway {
+                    Ok(gateway) => {
+                        self.run_with_gateway(gateway, shutdown.clone(), &logger)
+                            .await?
                     }
-                    self.prepare_gateway_change(&gateway_backoff, shutdown.clone(), &logger).await;
-                    if shutdown.is_triggered() {
-                        return Ok(())
+                    Err(err) => warn!(logger, "gateway selection error: {err:?}"),
                     }
-                },
-                message = self.messages.recv() => match message {
-                    Some(message) => self.handle_message(message, Some(&mut gateway.clone()), &logger).await,
-                    None => warn!(logger, "ignoring closed messages channel"),
-                }
+            }
+            self.prepare_gateway_change(&gateway_backoff, shutdown.clone(), &logger)
+                .await;
+            if shutdown.is_triggered() {
+                return Ok(());
             }
         }
     }
@@ -192,6 +186,36 @@ impl Dispatcher {
         let routing = routing_gateway.routing(routing_height);
         let region_params = gateway.region_params(keypair);
         tokio::try_join!(routing, region_params)
+    }
+
+    async fn run_with_gateway(
+        &mut self,
+        gateway: GatewayService,
+        shutdown: triggered::Listener,
+        logger: &Logger,
+    ) -> Result {
+        info!(logger, "using gateway";
+        "pubkey" => gateway.uri.pubkey.to_string(),
+        "uri" => gateway.uri.uri.to_string());
+        loop {
+            tokio::select! {
+                _ = shutdown.clone() => {
+                    info!(logger, "shutting down");
+                    return Ok(())
+                },
+                gateway_streams = Self::gateway_streams(gateway.clone(), self.routing_height, self.keypair.clone()) => {
+                    match gateway_streams {
+                        Ok((routing_stream, region_stream)) => self.run_with_gateway_streams(gateway, routing_stream, region_stream, shutdown.clone(), logger).await?,
+                        Err(err) => warn!(logger, "gateway streams error: {err:?}")
+                    }
+                    return Ok(())
+                },
+                message = self.messages.recv() => match message {
+                    Some(message) => self.handle_message(message, Some(&mut gateway.clone()), logger).await,
+                    None => warn!(logger, "ignoring closed messages channel"),
+                }
+            }
+        }
     }
 
     async fn run_with_gateway_streams(
